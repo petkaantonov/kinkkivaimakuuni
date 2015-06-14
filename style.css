@@ -1,0 +1,32 @@
+.makuuni {
+  color: rgb(249, 246, 30);
+}
+.kinkki {
+  color: rgb(228, 22, 108);
+}
+.solution {
+  font-size: 60px;
+  text-align: center;
+  margin-top: 35px;
+  text-shadow: 1px 1px 1px black;
+}
+
+.stop {
+    text-shadow: 1px 1px 1px black;
+}
+
+.negative-delta {
+    color: rgb(228, 22, 108);
+}
+
+.positive-delta {
+    color: green;
+}
+
+.arrival-time-minutes {
+    font-weight: bold;
+}
+
+.extra-info {
+    margin-top: 25px;
+}
