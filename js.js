@@ -118,7 +118,7 @@ Stop.prototype.get24HourTimetables = function(date) {
 
             var busArrivalTimestamp = (+copy + (+hour * 60 * 60 * 1000) + (+minute * 60 * 1000));
 
-            if ((busArrivalTimestamp + 60 * 1000) < now) {
+            if ((busArrivalTimestamp + 59 * 1000) < now) {
                 return;
             }
 
