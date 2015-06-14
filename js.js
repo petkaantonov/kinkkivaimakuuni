@@ -56,6 +56,12 @@ function parseTimetableData(rawHtml) {
     return ret;
 }
 
+var corsProviders = [
+    function(url) {
+        return "http://crossorigin.me/" + url
+    }
+];
+
 function Stop(name, id, url) {
     this.name = name;
     this.id = id;
@@ -73,26 +79,38 @@ Stop.prototype.fetchTimetables = function() {
                 return resolve(item);
             }
         }
-        var xhr = new XMLHttpRequest();
 
-        xhr.open("GET", "http://crossorigin.me/" + self.url);
-        xhr.addEventListener("error", reject, false);
-        xhr.addEventListener("abort", reject, false);
-        xhr.addEventListener("load", function() {
-            try {
-                if (xhr.status !== 200) {
-                    reject(new Error(xhr.responseText));
-                } else {
-                    var result = parseTimetableData(xhr.responseText);
-                    localStorage.setItem("stopdata-" + self.id, JSON.stringify(result));
-                    resolve(result);
+        resolve((function corsLoop(index) {
+            return new Promise(function(resolve, reject) {
+                var corsProvider = corsProviders[index];
+                var xhr = new XMLHttpRequest();
+
+                xhr.open("GET", corsProvider(self.url));
+                xhr.addEventListener("error", reject, false);
+                xhr.addEventListener("abort", reject, false);
+                xhr.addEventListener("load", function() {
+                    try {
+                        if (xhr.status !== 200) {
+                            reject(new Error(xhr.responseText));
+                        } else {
+                            var result = parseTimetableData(xhr.responseText);
+                            localStorage.setItem("stopdata-" + self.id, JSON.stringify(result));
+                            resolve(result);
+                        }
+                    } catch (e) {
+                        reject(e);
+
+                    }
+                }, false);
+                xhr.send(null);
+
+            }).catch(function(e) {
+                if (index + 1 < corsProviders.length) {
+                    return corsLoop(index + 1);
                 }
-            } catch (e) {
-                reject(e);
-
-            }
-        }, false);
-        xhr.send(null);
+                throw e;
+            });
+        })(0));
     }).then(function(result) {
         self.timetables = result;
         return self;
@@ -143,34 +161,21 @@ Stop.prototype.getSufficientTimetables = function() {
     return first.concat(second);
 };
 
-var getBusArrivals = (function() {
-    var lastFetch = 0;
-    var cache = null;
-    var ONE_HOUR = 60 * 60 * 1000;
+function getBusArrivals() {
+    var ret = [];
 
-    return function getBusArrivals() {
-        if (cache && Date.now() - lastFetch < ONE_HOUR) {
-            return cache.slice();
+    for (var i = 0; i < arguments.length; ++i) {
+        var stop = arguments[i];
+        var stopTimetables = stop.getSufficientTimetables();
+        for (var j = 0; j < stopTimetables.length; ++j) {
+            ret.push(stopTimetables[j]);
         }
-
-        var ret = [];
-
-        for (var i = 0; i < arguments.length; ++i) {
-            var stop = arguments[i];
-            var stopTimetables = stop.getSufficientTimetables();
-            for (var j = 0; j < stopTimetables.length; ++j) {
-                ret.push(stopTimetables[j]);
-            }
-        }
-
-        ret = ret.sort(function(a, b) {
-            return a.busArrivalTimestamp - b.busArrivalTimestamp;
-        });
-        lastFetch = Date.now();
-        cache = ret;
-        return ret;
     }
-})();
+
+    return ret.sort(function(a, b) {
+        return a.busArrivalTimestamp - b.busArrivalTimestamp;
+    });
+}
 
 
 var finnishTzOffset = (function() {
@@ -259,19 +264,15 @@ function finnishDate(timestamp) {
     return new Date(timestamp + finnishTzOffset());
 }
 
-function arrayEqual(a, b) {
-    if (a.length === b.length) {
-        for (var i = 0; i < a.length; ++i) {
-            if (a[i] !== b[i]) {
-                return false;
-            }
-        }
-        return true;
-    }
-    return false;
+function hideSpinner() {
+    document.querySelector("#spinner-container").style.display = "none";
 }
 
-var prevResult;
+function showError(e) {
+    document.querySelector("#error-container").style.display = "block";
+}
+
+var prevBest;
 function renderUi() {
     try {
         var now = Date.now() - 60 * 1000;
@@ -284,17 +285,43 @@ function renderUi() {
         }).slice(0, 10);
 
         var best = topCurrentArrivals[0];
-        var className = "solution " + best.source.toLowerCase();
-        var elem = document.querySelector("#solution");
-        elem.className = className;
-        elem.textContent = best.source;
 
-        if (!prevResult || !arrayEqual(prevResult, topCurrentArrivals)) {
+        if (!prevBest || prevBest.busArrivalTimestamp !== best.busArrivalTimestamp) {
+            var className = "solution " + best.source.toLowerCase();
+            var elem = document.querySelector("#solution");
+            elem.className = className;
+            elem.textContent = best.source;
             document.querySelector("#more-info-table").innerHTML = renderTable(topCurrentArrivals);
         }
-        prevResult = topCurrentArrivals;
+        prevBest = best;
     } finally {
         setTimeout(renderUi, 1000);
+    }
+}
+
+function getArrivalFormattingData(deltaMinutes) {
+    var className = "neutral-delta";
+
+    if (deltaMinutes < 0) {
+        className = "negative-delta";
+    } else if (deltaMinutes > 0) {
+        className = "positive-delta";
+    }
+
+    className += " arrival-delta-amount";
+
+    var minutesAmountText;
+    if (deltaMinutes > 0) {
+        minutesAmountText = "+" + deltaMinutes;
+    } else {
+        minutesAmountText = deltaMinutes + "";
+    }
+
+    var minutesText = deltaMinutes === 1 || deltaMinutes === -1 ? "minuutti" : "minuuttia";
+    return {
+        minutesText: minutesText,
+        deltaClassName: className,
+        minutesAmountText: minutesAmountText
     }
 }
 
@@ -313,24 +340,14 @@ function renderTable(results) {
     results.forEach(function(result) {
         var ts = result.busArrivalTimestamp;
         var deltaMinutes = Math.round((ts - now) / 1000 / 60);
+        var arrivalFormattingData = getArrivalFormattingData(deltaMinutes);
 
-        var className = "neutral-delta";
-
-        if (deltaMinutes < 0) {
-            className = "negative-delta";
-        } else if (deltaMinutes > 0) {
-            className = "positive-delta";
-        }
-
-        var arrivalTime = deltaMinutes + "";
-        if (deltaMinutes > 0) {
-            arrivalTime = "+" + deltaMinutes;
-        }
-
-        var minutes = deltaMinutes === 1 ? "minuutti" : "minuuttia";
 
         ret += '<tr>';
-        ret += '<td><span data-timestamp="'+ts+'" class="arrival-time-minutes '+className+'">'+arrivalTime+'</span> <span>'+minutes+'</span></td>';
+        ret += '<td><div class="arrival-time-container" data-timestamp="'+ts+'">'+
+                    '<span class="'+arrivalFormattingData.deltaClassName +
+                    '">'+arrivalFormattingData.minutesAmountText+'</span> <span class="arrival-minutes-text">'+
+                    arrivalFormattingData.minutesText+'</span></div></td>';
         ret += '<td><span class="buscode">' + result.busCode + '</span></td>';
         ret += '<td><span class="stop '+result.source.toLowerCase()+'">'+result.source+'</span></td>';
         ret += '</tr>';
@@ -341,30 +358,21 @@ function renderTable(results) {
 }
 
 setInterval(function() {
-    var res = document.querySelectorAll(".arrival-time-minutes");
+    var res = document.querySelectorAll(".arrival-time-container");
     var now = Date.now();
 
     for (var i = 0; i < res.length; ++i) {
         var elem = res[i];
         var ts = parseInt(elem.getAttribute("data-timestamp"), 10);
         var deltaMinutes = Math.round((ts - now) / 1000 / 60);
+        var arrivalFormattingData = getArrivalFormattingData(deltaMinutes);
 
-        var className = "neutral-delta";
+        var amountContainer = elem.querySelector(".arrival-delta-amount");
+        var textContainer = elem.querySelector(".arrival-minutes-text");
 
-        if (deltaMinutes < 0) {
-            className = "negative-delta";
-        } else if (deltaMinutes > 0) {
-            className = "positive-delta";
-        }
-        className += " arrival-time-minutes";
-
-        var arrivalTime = deltaMinutes + "";
-        if (deltaMinutes > 0) {
-            arrivalTime = "+" + deltaMinutes;
-        }
-
-        elem.className = className;
-        elem.textContent = arrivalTime;
+        amountContainer.className = arrivalFormattingData.deltaClassName;
+        amountContainer.textContent = arrivalFormattingData.minutesAmountText;
+        textContainer.textContent = arrivalFormattingData.minutesText;
     }
 }, 1000);
 
@@ -387,4 +395,7 @@ var dayToDayType = [
 var kinkki = new Stop("Kinkki", 1318, "http://aikataulut.reittiopas.fi/pysakit/fi/1140106.html");
 var makuuni = new Stop("Makuuni", 1316, "http://aikataulut.reittiopas.fi/pysakit/fi/1140105.html");
 
-Promise.all([kinkki.fetchTimetables(), makuuni.fetchTimetables()]).then(renderUi);
+Promise.all([kinkki.fetchTimetables(), makuuni.fetchTimetables()]).then(renderUi).then(hideSpinner).catch(function(e) {
+    hideSpinner();
+    showError(e);
+})

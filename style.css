@@ -1,3 +1,7 @@
+body {
+    font-size: 16px;
+}
+
 .makuuni {
   color: rgb(249, 246, 30);
 }
@@ -23,10 +27,21 @@
     color: green;
 }
 
-.arrival-time-minutes {
+.arrival-delta-amount {
     font-weight: bold;
 }
 
 .extra-info {
     margin-top: 25px;
+}
+
+.spinner-container {
+    height: 19px;
+    width: 220px;
+    margin: 35px auto;
+}
+
+.error-container {
+    margin: 35px auto;
+    display: none;
 }

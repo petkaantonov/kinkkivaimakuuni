@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Kinkki vai Makuuni</title>
     <link type="text/css" rel="stylesheet" href="css.css">
     <link type="text/css" rel="stylesheet" href="style.css">
@@ -23,6 +23,13 @@
                   Kinkki vai makuuni?
                 </h1>
 
+                <div class="alert alert-danger error-container" role="alert" id="error-container">
+                        Something went wrong. Please try reloading the page.
+                </div>
+
+                <div id="spinner-container" class="spinner-container">
+                    <img src="ajax-loader.gif" width="220" height="19" alt="Loading" title="Loading">
+                </div>
                 <div class="solution" id="solution"></div>
 
                 <div class="extra-info" id="more-info-table"></div>
