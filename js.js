@@ -47,7 +47,7 @@ function parseTimetableData(rawHtml) {
         weekday: {},
         saturday: {},
         sunday: {},
-        lastFetch: +(new Date())
+        lastFetch: Date.now()
     }
     var titles = doc.querySelectorAll(".stoptitle1");
     parseData(ret.weekday, timetableTableOfTitle(titles[0]));
@@ -75,7 +75,7 @@ Stop.prototype.fetchTimetables = function() {
         var item = localStorage.getItem("stopdata-" + self.id);
         if (item) {
             item = JSON.parse(item);
-            if (+(new Date()) - item.lastFetch < 86400 * 1000) {
+            if (Date.now() - item.lastFetch < 86400 * 1000) {
                 return resolve(item);
             }
         }
@@ -127,7 +127,7 @@ Stop.prototype.get24HourTimetables = function(date) {
     copy.setUTCMilliseconds(0);
 
     var ret = [];
-    var now = Date.now();
+    var now = currentFinnishDate();
 
     Object.keys(rawTable).forEach(function(hour) {
         var minuteTables = rawTable[hour];
@@ -326,7 +326,7 @@ function getArrivalFormattingData(deltaMinutes) {
 }
 
 function renderTable(results) {
-    var now = Date.now();
+    var now = +currentFinnishDate();
     var ret = '<table class="extra-info-table table table-condensed">\n\
       <thead>\n\
         <tr>\n\
@@ -359,7 +359,7 @@ function renderTable(results) {
 
 setInterval(function() {
     var res = document.querySelectorAll(".arrival-time-container");
-    var now = Date.now();
+    var now = +currentFinnishDate();
 
     for (var i = 0; i < res.length; ++i) {
         var elem = res[i];
